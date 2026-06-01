@@ -34,12 +34,10 @@ export async function GET(req) {
         let audioUrl = null;
 
         if (job.status === 'completed') {
-            const fileName = `tts-${userId}.mp3`;
-            const { blobs } = await list({ prefix: fileName });
-            const existingFile = blobs.find(file => file.pathname === fileName);
+            const { blobs } = await list({ prefix: `tts-${userId}-` });
 
-            if (existingFile) {
-                audioUrl = existingFile.url;
+            if (blobs && blobs.length > 0) {
+                audioUrl = blobs[0].url;
             }
         }
 

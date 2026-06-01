@@ -1,7 +1,8 @@
 require('dotenv').config();
 const { Worker } = require('bullmq');
 const IORedis = require('ioredis');
-const { put } = require('@vercel/blob');
+const { put, list, del } = require('@vercel/blob');
+const crypto = require('crypto');
 const { processTTS } = require('./ttsService');
 const db = require('./db');
 const { QUEUE_NAME } = require('./config');
@@ -49,7 +50,19 @@ const worker = new Worker(
 
         await job.updateProgress(95);
 
-        const fileName = `tts-${userId}.mp3`;
+        try {
+            const { blobs } = await list({ prefix: `tts-${userId}-` });
+            if (blobs.length > 0) {
+                const urlsToDelete = blobs.map(b => b.url);
+                console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Found ${blobs.length} existing blobs. Deleting...`);
+                await del(urlsToDelete);
+            }
+        } catch (cleanupError) {
+            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed to clean up existing blobs.`, cleanupError.stack);
+        }
+
+        const uniqueId = crypto.randomUUID();
+        const fileName = `tts-${userId}-${uniqueId}.mp3`;
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Vercel Blob.`);
 
         let blob;
