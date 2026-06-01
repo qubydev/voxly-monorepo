@@ -216,7 +216,7 @@ export default function Dashboard() {
               <div className='flex-1'>
                 {audioUrl && (
                   <div className="hidden md:flex items-center gap-2 flex-1 max-w-md">
-                    <AudioPlayer url={audioUrl} />
+                    <AudioPlayer key={audioUrl} url={audioUrl} />
                     <button
                       onClick={handleDownload}
                       disabled={isDownloading}
@@ -251,7 +251,7 @@ export default function Dashboard() {
 
             {audioUrl && (
               <div className="flex md:hidden items-center gap-2 w-full">
-                <AudioPlayer url={audioUrl} />
+                <AudioPlayer key={audioUrl} url={audioUrl} />
                 <button
                   onClick={handleDownload}
                   disabled={isDownloading}

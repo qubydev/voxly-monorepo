@@ -49,7 +49,7 @@ const worker = new Worker(
 
         await job.updateProgress(95);
 
-        const fileName = `tts-${userId}.mp3`;
+        const fileName = `tts-${userId}-${databaseId}.mp3`;
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Vercel Blob.`);
 
         let blob;
@@ -73,8 +73,8 @@ const worker = new Worker(
 
         try {
             await db.query(
-                `UPDATE tts_jobs SET status = $1, time_taken = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-                ['completed', timeTaken, databaseId]
+                `UPDATE tts_jobs SET status = $1, time_taken = $2, audio_url = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
+                ['completed', timeTaken, blob.url, databaseId]
             );
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database status updated to 'completed'.`);
         } catch (dbError) {

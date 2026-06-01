@@ -1,10 +1,11 @@
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
-import { list } from '@vercel/blob';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
+
+const noStoreHeaders = { 'Cache-Control': 'no-store' };
 
 export async function GET(req) {
     try {
@@ -19,7 +20,7 @@ export async function GET(req) {
         const userId = session.user.id;
 
         const result = await db.execute(sql`
-      SELECT id, status, finished_chunks, total_chunks, time_taken, error_message 
+      SELECT id, status, finished_chunks, total_chunks, time_taken, audio_url, error_message 
       FROM tts_jobs 
       WHERE user_id = ${userId}
       ORDER BY created_at DESC
@@ -27,20 +28,14 @@ export async function GET(req) {
     `);
 
         if (!result.rows || result.rows.length === 0) {
-            return Response.json({ status: 'idle' }, { status: 200 });
+            return Response.json({ status: 'idle' }, { status: 200, headers: noStoreHeaders });
         }
 
         const job = result.rows[0];
         let audioUrl = null;
 
         if (job.status === 'completed') {
-            const fileName = `tts-${userId}.mp3`;
-            const { blobs } = await list({ prefix: fileName });
-            const existingFile = blobs.find(file => file.pathname === fileName);
-
-            if (existingFile) {
-                audioUrl = existingFile.url;
-            }
+            audioUrl = job.audio_url;
         }
 
         return Response.json({
@@ -51,7 +46,7 @@ export async function GET(req) {
             timeTaken: job.time_taken,
             errorMessage: job.error_message,
             audioUrl
-        }, { status: 200 });
+        }, { status: 200, headers: noStoreHeaders });
 
     } catch (error) {
         console.error(error);

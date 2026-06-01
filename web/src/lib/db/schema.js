@@ -61,6 +61,7 @@ export const ttsJobs = pgTable("tts_jobs", {
     finishedChunks: integer("finished_chunks").default(0),
     totalChunks: integer("total_chunks").default(0),
     timeTaken: numeric("time_taken", { precision: 10, scale: 2 }),
+    audioUrl: text("audio_url"),
     errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
