@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
-import { supabase } from '@/lib/supabase';
+import { list } from '@vercel/blob';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
@@ -35,22 +35,11 @@ export async function GET(req) {
 
         if (job.status === 'completed') {
             const fileName = `tts-${userId}.mp3`;
-            const bucketName = process.env.NEXT_PUBLIC_SUPABASE_BUCKET || 'audio';
+            const { blobs } = await list({ prefix: fileName });
+            const existingFile = blobs.find(file => file.pathname === fileName);
 
-            const { data: files } = await supabase.storage
-                .from(bucketName)
-                .list('', { search: fileName });
-
-            const fileExists = files && files.some(file => file.name === fileName);
-
-            if (fileExists) {
-                const { data, error } = await supabase.storage
-                    .from(bucketName)
-                    .createSignedUrl(fileName, 3600);
-
-                if (!error && data) {
-                    audioUrl = data.signedUrl;
-                }
+            if (existingFile) {
+                audioUrl = existingFile.url;
             }
         }
 
