@@ -14,10 +14,9 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
-    "@supabase/supabase-js": "^2.106.2",
+    "@vercel/blob": "^2.4.0",
     "bullmq": "^5.77.6",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "ioredis": "^5.11.0",
     "node-edge-tts": "^1.2.10",
