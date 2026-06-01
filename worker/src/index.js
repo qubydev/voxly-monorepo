@@ -58,7 +58,8 @@ const worker = new Worker(
                 access: 'public',
                 contentType: 'audio/mpeg',
                 addRandomSuffix: false,
-                allowOverwrite: true
+                allowOverwrite: true,
+                cacheControlMaxAge: 0
             });
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Vercel Blob upload successful. URL: ${blob.url}`);
         } catch (uploadError) {
