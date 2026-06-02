@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { ttsJobs } from '@/lib/db/schema';
+import { ttsJobs, subscription } from '@/lib/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { ttsQueue } from '@/lib/queue';
 import { auth } from '@/lib/auth';
@@ -22,6 +22,25 @@ export async function POST(req) {
 
         if (!text) {
             return Response.json({ error: 'Text is required' }, { status: 400 });
+        }
+
+        const cost = text.length;
+
+        const subData = await db
+            .select({
+                balance: subscription.balance,
+                isUnlimited: subscription.isUnlimited,
+                subscriptionEndsAt: subscription.subscriptionEndsAt
+            })
+            .from(subscription)
+            .where(eq(subscription.userId, userId))
+            .limit(1);
+
+        const sub = subData[0];
+        const isExpired = !sub || new Date() > new Date(sub.subscriptionEndsAt);
+
+        if (isExpired || (!sub.isUnlimited && sub.balance < cost)) {
+            return Response.json({ error: 'Insufficient credits.' }, { status: 403 });
         }
 
         const activeJobs = await db

@@ -66,3 +66,13 @@ export const ttsJobs = pgTable("tts_jobs", {
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
+
+export const subscription = pgTable("subscription", {
+    userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+    balance: integer("balance").notNull().default(0),
+    isUnlimited: boolean("is_unlimited").notNull().default(false),
+    planType: varchar("plan_type", { length: 20 }).notNull().default('NONE'),
+    cycleEndsAt: timestamp("cycle_ends_at").notNull(),
+    subscriptionEndsAt: timestamp("subscription_ends_at").notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

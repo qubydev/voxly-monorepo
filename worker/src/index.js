@@ -17,8 +17,27 @@ const worker = new Worker(
     async (job) => {
         const startTime = Date.now();
         const { text, voice, databaseId, userId } = job.data;
+        const cost = text?.length || 0;
 
-        console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Initializing job. User ID: ${userId} | Database ID: ${databaseId} | Voice: ${voice} | Characters: ${text?.length || 0}`);
+        console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Initializing job. User ID: ${userId} | Database ID: ${databaseId} | Voice: ${voice} | Characters: ${cost}`);
+
+        const deductResult = await db.execute(sql`
+            UPDATE subscription
+            SET balance = CASE WHEN is_unlimited = true THEN balance ELSE balance - ${cost} END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ${userId}
+              AND subscription_ends_at >= CURRENT_TIMESTAMP
+              AND (is_unlimited = true OR balance >= ${cost})
+            RETURNING user_id
+        `);
+
+        const rows = deductResult.rows || deductResult;
+
+        if (!rows || rows.length === 0) {
+            throw new Error("INSUFFICIENT_CREDITS");
+        }
+
+        console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Deducted ${cost} credits from user ${userId}.`);
 
         try {
             await db.execute(sql`UPDATE tts_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
@@ -110,6 +129,21 @@ worker.on('completed', (job) => {
 worker.on('failed', async (job, err) => {
     const errorMessage = err?.message || String(err) || "Unknown Error";
     console.error(`[${new Date().toISOString()}] [CRITICAL] [Job ${job?.id || 'UNKNOWN'}] Process execution failed: ${errorMessage}`, err?.stack || err);
+
+    if (job?.data?.userId && errorMessage !== "INSUFFICIENT_CREDITS") {
+        const cost = job.data.text?.length || 0;
+        try {
+            await db.execute(sql`
+                UPDATE subscription
+                SET balance = CASE WHEN is_unlimited = true THEN balance ELSE balance + ${cost} END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ${job.data.userId}
+            `);
+            console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Refunded ${cost} credits to user ${job.data.userId}.`);
+        } catch (refundError) {
+            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed to refund credits.`, refundError.stack);
+        }
+    }
 
     if (job?.data?.databaseId) {
         try {

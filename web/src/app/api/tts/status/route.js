@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { ttsJobs } from '@/lib/db/schema';
+import { ttsJobs, subscription } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { supabase } from '@/lib/supabase';
 import { auth } from '@/lib/auth';
@@ -19,26 +19,42 @@ export async function GET(req) {
 
         const userId = session.user.id;
 
-        const result = await db
-            .select({
-                id: ttsJobs.id,
-                status: ttsJobs.status,
-                fileName: ttsJobs.fileName,
-                finishedChunks: ttsJobs.finishedChunks,
-                totalChunks: ttsJobs.totalChunks,
-                timeTaken: ttsJobs.timeTaken,
-                errorMessage: ttsJobs.errorMessage,
-            })
-            .from(ttsJobs)
-            .where(eq(ttsJobs.userId, userId))
-            .orderBy(desc(ttsJobs.createdAt))
-            .limit(1);
+        const [jobResult, subResult] = await Promise.all([
+            db
+                .select({
+                    id: ttsJobs.id,
+                    status: ttsJobs.status,
+                    fileName: ttsJobs.fileName,
+                    finishedChunks: ttsJobs.finishedChunks,
+                    totalChunks: ttsJobs.totalChunks,
+                    timeTaken: ttsJobs.timeTaken,
+                    errorMessage: ttsJobs.errorMessage,
+                })
+                .from(ttsJobs)
+                .where(eq(ttsJobs.userId, userId))
+                .orderBy(desc(ttsJobs.createdAt))
+                .limit(1),
+            db
+                .select({
+                    balance: subscription.balance,
+                    isUnlimited: subscription.isUnlimited,
+                })
+                .from(subscription)
+                .where(eq(subscription.userId, userId))
+                .limit(1)
+        ]);
 
-        if (!result || result.length === 0) {
-            return Response.json({ status: 'idle' }, { status: 200 });
+        const currentSub = subResult[0] || { balance: 0, isUnlimited: false };
+
+        if (!jobResult || jobResult.length === 0) {
+            return Response.json({
+                status: 'idle',
+                credits: currentSub.balance,
+                isUnlimited: currentSub.isUnlimited
+            }, { status: 200 });
         }
 
-        const job = result[0];
+        const job = jobResult[0];
         let audioUrl = null;
 
         if (job.status === 'completed' && job.fileName) {
@@ -58,7 +74,9 @@ export async function GET(req) {
             totalChunks: job.totalChunks,
             timeTaken: job.timeTaken,
             errorMessage: job.errorMessage,
-            audioUrl
+            audioUrl,
+            credits: currentSub.balance,
+            isUnlimited: currentSub.isUnlimited
         }, { status: 200 });
 
     } catch (error) {
