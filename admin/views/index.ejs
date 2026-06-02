@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-base-200 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold">Admin Management</h1>
+                <p class="text-base-content/60">Manage customer tiers and calculated expirations</p>
+            </div>
+            <div class="stats shadow bg-base-100">
+                <div class="stat">
+                    <div class="stat-title">Total Users</div>
+                    <div class="stat-value">
+                        <%= users.length %>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto bg-base-100 rounded-box shadow-xl">
+            <table class="table table-zebra w-full">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Plan Type</th>
+                        <th>Balance</th>
+                        <th>Unlimited</th>
+                        <th>Subscription Expiry</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% users.forEach(function(u) { %>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span>
+                                                <%= u.name ? u.name.charAt(0).toUpperCase() : 'U' %>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold">
+                                            <%= u.name || 'N/A' %>
+                                        </div>
+                                        <div class="text-xs opacity-50">ID: <%= u.id %>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <%= u.email %>
+                            </td>
+                            <td>
+                                <span
+                                    class="badge <%= u.planType && u.planType !== 'NONE' ? 'badge-primary' : 'badge-ghost' %>">
+                                    <%= u.planType || 'NONE' %>
+                                </span>
+                            </td>
+                            <td class="font-mono">
+                                <%= u.balance !==null ? u.balance.toLocaleString() : 0 %>
+                            </td>
+                            <td>
+                                <span class="badge <%= u.isUnlimited ? 'badge-success' : 'badge-neutral' %> text-xs">
+                                    <%= u.isUnlimited ? 'YES' : 'NO' %>
+                                </span>
+                            </td>
+                            <td>
+                                <%= u.subscriptionEndsAt ? new Date(u.subscriptionEndsAt).toLocaleDateString()
+                                    : 'No Active Plan' %>
+                            </td>
+                            <td class="text-right project-actions">
+                                <div class="inline-flex gap-2">
+                                    <button onclick="openManageModal('<%= u.id %>', '<%= u.name %>')"
+                                        class="btn btn-sm btn-primary">
+                                        Assign Plan
+                                    </button>
+                                    <% if (u.planType && u.planType !=='NONE' ) { %>
+                                        <form action="/admin/remove-subscription" method="POST" class="inline">
+                                            <input type="hidden" name="userId" value="<%= u.id %>" />
+                                            <button type="submit" class="btn btn-sm btn-error btn-outline">
+                                                Cancel Subscription
+                                            </button>
+                                        </form>
+                                        <% } %>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <dialog id="manage_modal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="modal_title">Assign Subscription Plan</h3>
+            <form action="/admin/update-subscription" method="POST" class="space-y-4">
+                <input type="hidden" name="userId" id="modal_user_id" />
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text">Select Preset Package</span></label>
+                    <select name="subType" class="select select-bordered w-full" required>
+                        <option value="1M_CREDITS">1M Credits (Expires monthly)</option>
+                        <option value="UNLIMITED">Unlimited Credits (Expires monthly)</option>
+                    </select>
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text">Purchase Duration (n Months)</span></label>
+                    <input type="number" name="months" class="input input-bordered w-full" min="1" value="1" required />
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" onclick="document.getElementById('manage_modal').close()"
+                        class="btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Confirm & Activate</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <script>
+        function openManageModal(id, name) {
+            document.getElementById('modal_user_id').value = id;
+            document.getElementById('modal_title').innerText = "Configure Plan for " + name;
+            document.getElementById('manage_modal').showModal();
+        }
+    </script>
+</body>
+
+</html>
