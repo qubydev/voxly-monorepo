@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
-import { sql } from 'drizzle-orm';
-import { list } from '@vercel/blob';
+import { ttsJobs } from '@/lib/db/schema';
+import { eq, desc } from 'drizzle-orm';
+import { supabase } from '@/lib/supabase';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
@@ -18,41 +19,55 @@ export async function GET(req) {
 
         const userId = session.user.id;
 
-        const result = await db.execute(sql`
-      SELECT id, status, finished_chunks, total_chunks, time_taken, error_message 
-      FROM tts_jobs 
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
+        const result = await db
+            .select({
+                id: ttsJobs.id,
+                status: ttsJobs.status,
+                finishedChunks: ttsJobs.finishedChunks,
+                totalChunks: ttsJobs.totalChunks,
+                timeTaken: ttsJobs.timeTaken,
+                errorMessage: ttsJobs.errorMessage,
+            })
+            .from(ttsJobs)
+            .where(eq(ttsJobs.userId, userId))
+            .orderBy(desc(ttsJobs.createdAt))
+            .limit(1);
 
-        if (!result.rows || result.rows.length === 0) {
+        if (!result || result.length === 0) {
             return Response.json({ status: 'idle' }, { status: 200 });
         }
 
-        const job = result.rows[0];
+        const job = result[0];
         let audioUrl = null;
 
         if (job.status === 'completed') {
-            const { blobs } = await list({ prefix: `tts-${userId}-` });
+            const { data: files } = await supabase.storage
+                .from('tts-audio')
+                .list(userId);
 
-            if (blobs && blobs.length > 0) {
-                audioUrl = blobs[0].url;
+            if (files && files.length > 0) {
+                const { data, error } = await supabase.storage
+                    .from('tts-audio')
+                    .createSignedUrl(`${userId}/${files[0].name}`, 3600);
+
+                if (!error && data) {
+                    audioUrl = data.signedUrl;
+                }
             }
         }
 
         return Response.json({
             jobId: job.id,
             status: job.status,
-            finishedChunks: job.finished_chunks,
-            totalChunks: job.total_chunks,
-            timeTaken: job.time_taken,
-            errorMessage: job.error_message,
+            finishedChunks: job.finishedChunks,
+            totalChunks: job.totalChunks,
+            timeTaken: job.timeTaken,
+            errorMessage: job.errorMessage,
             audioUrl
         }, { status: 200 });
 
     } catch (error) {
-        console.error(error);
+        console.error('TTS Status Error:', error);
         return Response.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

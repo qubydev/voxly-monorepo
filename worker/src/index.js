@@ -1,11 +1,13 @@
 require('dotenv').config();
 const { Worker } = require('bullmq');
 const IORedis = require('ioredis');
-const { put, list, del } = require('@vercel/blob');
 const crypto = require('crypto');
 const { processTTS } = require('./ttsService');
 const db = require('./db');
+const { supabase } = require('./supabase');
 const { QUEUE_NAME } = require('./config');
+const { sql } = require('drizzle-orm');
+const {eq} = require('drizzle-orm');
 
 const redisConnection = new IORedis(process.env.REDIS_URL, {
     maxRetriesPerRequest: null,
@@ -21,10 +23,7 @@ const worker = new Worker(
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Initializing job. User ID: ${userId} | Database ID: ${databaseId} | Voice: ${voice} | Characters: ${text?.length || 0}`);
 
         try {
-            await db.query(
-                `UPDATE tts_jobs SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-                ['processing', databaseId]
-            );
+            await db.execute(sql`UPDATE tts_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database marked as 'processing'.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating status to 'processing' in database.`, dbError.stack);
@@ -37,10 +36,7 @@ const worker = new Worker(
             await job.updateProgress(percentage);
 
             try {
-                await db.query(
-                    `UPDATE tts_jobs SET finished_chunks = $1, total_chunks = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-                    [finished, total, databaseId]
-                );
+                await db.execute(sql`UPDATE tts_jobs SET finished_chunks = ${finished}, total_chunks = ${total}, updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
             } catch (dbError) {
                 console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating progress chunks in database.`, dbError.stack);
             }
@@ -50,33 +46,50 @@ const worker = new Worker(
 
         await job.updateProgress(95);
 
+        const bucket = 'tts-audio';
+        const prefix = `${userId}/`;
+
         try {
-            const { blobs } = await list({ prefix: `tts-${userId}-` });
-            if (blobs.length > 0) {
-                const urlsToDelete = blobs.map(b => b.url);
-                console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Found ${blobs.length} existing blobs. Deleting...`);
-                await del(urlsToDelete);
+            const { data: existingFiles } = await supabase.storage
+                .from(bucket)
+                .list(prefix);
+
+            if (existingFiles && existingFiles.length > 0) {
+                const filesToDelete = existingFiles.map(f => `${prefix}${f.name}`);
+                console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Found ${filesToDelete.length} existing files. Deleting...`);
+                await supabase.storage
+                    .from(bucket)
+                    .remove(filesToDelete);
             }
         } catch (cleanupError) {
-            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed to clean up existing blobs.`, cleanupError.stack);
+            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed to clean up existing files.`, cleanupError.stack);
         }
 
         const uniqueId = crypto.randomUUID();
-        const fileName = `tts-${userId}-${uniqueId}.mp3`;
-        console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Vercel Blob.`);
+        const fileName = `${userId}/${uniqueId}.mp3`;
+        console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Supabase Storage.`);
 
-        let blob;
+        let fileUrl;
         try {
-            blob = await put(fileName, finalAudioBuffer, {
-                access: 'public',
-                contentType: 'audio/mpeg',
-                addRandomSuffix: false,
-                allowOverwrite: true,
-                cacheControlMaxAge: 0
-            });
-            console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Vercel Blob upload successful. URL: ${blob.url}`);
+            const { data, error } = await supabase.storage
+                .from(bucket)
+                .upload(fileName, finalAudioBuffer, {
+                    contentType: 'audio/mpeg',
+                    upsert: true
+                });
+
+            if (error) {
+                throw error;
+            }
+
+            const { data: { publicUrl } } = supabase.storage
+                .from(bucket)
+                .getPublicUrl(data.path);
+
+            fileUrl = publicUrl;
+            console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Supabase Storage upload successful. URL: ${fileUrl}`);
         } catch (uploadError) {
-            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Vercel Blob upload failure.`, uploadError.stack);
+            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Supabase Storage upload failure.`, uploadError.stack);
             throw uploadError;
         }
 
@@ -85,10 +98,7 @@ const worker = new Worker(
         await job.updateProgress(100);
 
         try {
-            await db.query(
-                `UPDATE tts_jobs SET status = $1, time_taken = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-                ['completed', timeTaken, databaseId]
-            );
+            await db.execute(sql`UPDATE tts_jobs SET status = 'completed', time_taken = ${timeTaken}, updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database status updated to 'completed'.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating status to 'completed' in database.`, dbError.stack);
@@ -99,7 +109,7 @@ const worker = new Worker(
             status: 'success',
             timeTaken,
             databaseId,
-            url: blob.url
+            url: fileUrl
         };
     },
     { connection: redisConnection }
@@ -118,15 +128,12 @@ worker.on('completed', (job) => {
 });
 
 worker.on('failed', async (job, err) => {
-    const errorMessage = err?.message || err || "Unknown Error";
+    const errorMessage = err?.message || String(err) || "Unknown Error";
     console.error(`[${new Date().toISOString()}] [CRITICAL] [Job ${job?.id || 'UNKNOWN'}] Process execution failed: ${errorMessage}`, err?.stack || err);
 
     if (job?.data?.databaseId) {
         try {
-            await db.query(
-                `UPDATE tts_jobs SET status = $1, error_message = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-                ['failed', errorMessage, job.data.databaseId]
-            );
+            await db.execute(sql`UPDATE tts_jobs SET status = 'failed', error_message = ${errorMessage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${job.data.databaseId}`);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database successfully updated with failure trace.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Database write failed during error handler execution.`, dbError.stack);

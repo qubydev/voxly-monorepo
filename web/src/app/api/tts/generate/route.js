@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
-import { sql } from 'drizzle-orm';
+import { ttsJobs } from '@/lib/db/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 import { ttsQueue } from '@/lib/queue';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
@@ -23,25 +24,36 @@ export async function POST(req) {
             return Response.json({ error: 'Text is required' }, { status: 400 });
         }
 
-        const activeJobs = await db.execute(sql`
-      SELECT id FROM tts_jobs 
-      WHERE user_id = ${userId} AND status IN ('pending', 'processing') 
-      LIMIT 1
-    `);
+        // Check for active jobs
+        const activeJobs = await db
+            .select({ id: ttsJobs.id })
+            .from(ttsJobs)
+            .where(
+                and(
+                    eq(ttsJobs.userId, userId),
+                    inArray(ttsJobs.status, ['pending', 'processing'])
+                )
+            )
+            .limit(1);
 
-        if (activeJobs.rows && activeJobs.rows.length > 0) {
+        if (activeJobs.length > 0) {
             return Response.json({
                 error: 'A generation is already in progress. Please wait until it completes.'
             }, { status: 400 });
         }
 
-        const dbResult = await db.execute(sql`
-      INSERT INTO tts_jobs (user_id, status, text_content, voice) 
-      VALUES (${userId}, 'pending', ${text}, ${voice || 'aria'}) 
-      RETURNING id
-    `);
+        // Insert new job
+        const result = await db
+            .insert(ttsJobs)
+            .values({
+                userId: userId,
+                textContent: text,
+                voice: voice || 'aria',
+                status: 'pending'
+            })
+            .returning({ id: ttsJobs.id });
 
-        const databaseId = dbResult.rows[0].id;
+        const databaseId = result[0].id;
 
         const job = await ttsQueue.add('generate-tts', {
             text,
@@ -60,7 +72,7 @@ export async function POST(req) {
         }, { status: 201 });
 
     } catch (error) {
-        console.error(error);
+        console.error('TTS Error:', error);
         return Response.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
