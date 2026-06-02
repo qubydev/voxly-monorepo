@@ -1,28 +1,36 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-function getResend() {
-    const apiKey = process.env.RESEND_API_KEY;
+function getTransporter() {
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const secure = process.env.SMTP_SECURE === 'true';
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASSWORD;
 
-    if (!apiKey) {
-        throw new Error('RESEND_API_KEY is required to send email');
+    if (!host || !user || !pass) {
+        throw new Error('SMTP_HOST, SMTP_USER, and SMTP_PASSWORD are required to send email');
     }
 
-    return new Resend(apiKey);
+    return nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: {
+            user,
+            pass,
+        },
+    });
 }
 
 export async function sendEmail({ to, subject, text, html }) {
-    const from = process.env.RESEND_FROM || 'onboarding@resend.dev';
-    const resend = getResend();
+    const transporter = getTransporter();
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
 
-    const { error } = await resend.emails.send({
+    await transporter.sendMail({
         from,
         to,
         subject,
         text,
         html,
     });
-
-    if (error) {
-        throw new Error(error.message || 'Failed to send email with Resend');
-    }
 }

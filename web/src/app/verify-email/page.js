@@ -34,9 +34,9 @@ function VerifyEmailContent() {
                 return
             }
 
-            setMessage('Email verified. Redirecting...')
+            setMessage('Email verified. Taking you to your dashboard...')
             setTimeout(() => {
-                router.replace('/login')
+                router.replace('/')
             }, 900)
         }
 

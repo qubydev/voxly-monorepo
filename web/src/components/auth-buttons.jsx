@@ -18,6 +18,7 @@ export default function AuthButtons() {
     const [loading, setLoading] = useState(false)
     const [githubLoading, setGithubLoading] = useState(false)
     const [needsVerification, setNeedsVerification] = useState(false)
+    const [signupEmailSent, setSignupEmailSent] = useState(false)
 
     const isSignUp = view === 'signup'
     const isForgotPassword = view === 'forgot'
@@ -34,6 +35,7 @@ export default function AuthButtons() {
 
     const resetTransientState = () => {
         setNeedsVerification(false)
+        setSignupEmailSent(false)
         setPassword('')
     }
 
@@ -56,6 +58,7 @@ export default function AuthButtons() {
     const handleEmailAuth = async (event) => {
         event.preventDefault()
         setNeedsVerification(false)
+        setSignupEmailSent(false)
 
         if (!email.trim()) return toast.error('Enter your email.')
 
@@ -83,8 +86,8 @@ export default function AuthButtons() {
                     return
                 }
 
-                toast.success('Account created. Check your email to verify it.')
-                setAuthView('signin')
+                setSignupEmailSent(true)
+                toast.success('Account created. Check your email to continue.')
                 return
             }
 
@@ -204,6 +207,15 @@ export default function AuthButtons() {
                     {loading ? 'Please wait...' : (isForgotPassword ? 'Send reset link' : title)}
                 </Button>
             </form>
+
+            {signupEmailSent && (
+                <div className="border border-border px-3 py-3 text-sm">
+                    <p className="font-medium">Check your email</p>
+                    <p className="mt-1 text-muted-foreground">
+                        We sent a verification link to {email}. Click it to verify your account and continue.
+                    </p>
+                </div>
+            )}
 
             {needsVerification && (
                 <div className="border border-border px-3 py-3 text-sm">
