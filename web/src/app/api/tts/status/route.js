@@ -44,21 +44,32 @@ export async function GET(req) {
                 .limit(1),
             db
                 .select({
-                    balance: subscription.balance,
-                    isUnlimited: subscription.isUnlimited,
+                    planType: subscription.planType,
+                    status: subscription.status,
+                    creditsRemaining: subscription.creditsRemaining,
+                    currentPeriodEnd: subscription.currentPeriodEnd,
                 })
                 .from(subscription)
                 .where(eq(subscription.userId, userId))
                 .limit(1)
         ]);
 
-        const currentSub = subResult[0] || { balance: 0, isUnlimited: false };
+        const sub = subResult[0];
+        const hasActivePlan = Boolean(
+            sub &&
+            sub.status === 'active' &&
+            sub.currentPeriodEnd &&
+            new Date(sub.currentPeriodEnd) > new Date()
+        );
+        const isUnlimited = hasActivePlan && sub.planType === 'UNLIMITED_1M';
+        const credits = hasActivePlan ? sub.creditsRemaining : 0;
 
         if (!jobResult || jobResult.length === 0) {
             return Response.json({
                 status: 'idle',
-                credits: currentSub.balance,
-                isUnlimited: currentSub.isUnlimited
+                credits,
+                isUnlimited,
+                planType: hasActivePlan ? sub.planType : null
             }, { status: 200 });
         }
 
@@ -83,8 +94,9 @@ export async function GET(req) {
             timeTaken: job.timeTaken,
             errorMessage: job.errorMessage,
             audioUrl,
-            credits: currentSub.balance,
-            isUnlimited: currentSub.isUnlimited
+            credits,
+            isUnlimited,
+            planType: hasActivePlan ? sub.planType : null
         }, { status: 200 });
 
     } catch (error) {

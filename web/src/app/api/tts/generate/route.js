@@ -28,18 +28,25 @@ export async function POST(req) {
 
         const subData = await db
             .select({
-                balance: subscription.balance,
-                isUnlimited: subscription.isUnlimited,
-                subscriptionEndsAt: subscription.subscriptionEndsAt
+                planType: subscription.planType,
+                status: subscription.status,
+                creditsRemaining: subscription.creditsRemaining,
+                currentPeriodEnd: subscription.currentPeriodEnd
             })
             .from(subscription)
             .where(eq(subscription.userId, userId))
             .limit(1);
 
         const sub = subData[0];
-        const isExpired = !sub || new Date() > new Date(sub.subscriptionEndsAt);
+        const hasActivePlan = Boolean(
+            sub &&
+            sub.status === 'active' &&
+            sub.currentPeriodEnd &&
+            new Date(sub.currentPeriodEnd) > new Date()
+        );
+        const isUnlimited = hasActivePlan && sub.planType === 'UNLIMITED_1M';
 
-        if (isExpired || (!sub.isUnlimited && sub.balance < cost)) {
+        if (!hasActivePlan || (!isUnlimited && sub.creditsRemaining < cost)) {
             return Response.json({ error: 'Insufficient credits.' }, { status: 403 });
         }
 

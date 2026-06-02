@@ -1,6 +1,8 @@
-import { pgTable, text, timestamp, boolean, uuid, varchar, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, boolean, uuid, varchar, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
 
 export const jobStatus = pgEnum('job_status', ['pending', 'processing', 'completed', 'failed']);
+export const subscriptionPlan = pgEnum('subscription_plan', ['CREDITS_1M', 'UNLIMITED_1M']);
+export const subscriptionStatus = pgEnum('subscription_status', ['active', 'expired', 'cancelled']);
 
 export const user = pgTable("user", {
     id: text("id").primaryKey(),
@@ -69,10 +71,17 @@ export const ttsJobs = pgTable("tts_jobs", {
 
 export const subscription = pgTable("subscription", {
     userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-    balance: integer("balance").notNull().default(0),
-    isUnlimited: boolean("is_unlimited").notNull().default(false),
-    planType: varchar("plan_type", { length: 20 }).notNull().default('NONE'),
-    cycleEndsAt: timestamp("cycle_ends_at").notNull(),
-    subscriptionEndsAt: timestamp("subscription_ends_at").notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    planType: subscriptionPlan("plan_type").notNull(),
+    status: subscriptionStatus("status").notNull().default('active'),
+    creditsIncluded: integer("credits_included").notNull().default(0),
+    creditsRemaining: integer("credits_remaining").notNull().default(0),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }).defaultNow().notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
+    grantedBy: text("granted_by"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+    index("subscription_active_expiry_idx").on(table.status, table.currentPeriodEnd),
+]);

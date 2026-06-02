@@ -14,7 +14,7 @@
         <div class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-3xl font-bold">Admin Management</h1>
-                <p class="text-base-content/60">Manage customer tiers and calculated expirations</p>
+                <p class="text-base-content/60">Manage monthly credits and unlimited access</p>
             </div>
             <div class="stats shadow bg-base-100">
                 <div class="stat">
@@ -33,8 +33,8 @@
                         <th>User</th>
                         <th>Email</th>
                         <th>Plan Type</th>
-                        <th>Balance</th>
-                        <th>Unlimited</th>
+                        <th>Credits</th>
+                        <th>Status</th>
                         <th>Subscription Expiry</th>
                         <th class="text-right">Actions</th>
                     </tr>
@@ -65,20 +65,20 @@
                             </td>
                             <td>
                                 <span
-                                    class="badge <%= u.planType && u.planType !== 'NONE' ? 'badge-primary' : 'badge-ghost' %>">
+                                    class="badge <%= u.planType ? 'badge-primary' : 'badge-ghost' %>">
                                     <%= u.planType || 'NONE' %>
                                 </span>
                             </td>
                             <td class="font-mono">
-                                <%= u.balance !==null ? u.balance.toLocaleString() : 0 %>
+                                <%= u.planType === 'UNLIMITED_1M' ? 'Unlimited' : ((u.creditsRemaining !== null && u.creditsRemaining !== undefined) ? u.creditsRemaining.toLocaleString() : 0) %>
                             </td>
                             <td>
-                                <span class="badge <%= u.isUnlimited ? 'badge-success' : 'badge-neutral' %> text-xs">
-                                    <%= u.isUnlimited ? 'YES' : 'NO' %>
+                                <span class="badge <%= u.status === 'active' ? 'badge-success' : 'badge-neutral' %> text-xs">
+                                    <%= u.status || 'none' %>
                                 </span>
                             </td>
                             <td>
-                                <%= u.subscriptionEndsAt ? new Date(u.subscriptionEndsAt).toLocaleDateString()
+                                <%= u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toLocaleDateString()
                                     : 'No Active Plan' %>
                             </td>
                             <td class="text-right project-actions">
@@ -87,7 +87,7 @@
                                         class="btn btn-sm btn-primary">
                                         Assign Plan
                                     </button>
-                                    <% if (u.planType && u.planType !=='NONE' ) { %>
+                                    <% if (u.status === 'active') { %>
                                         <form action="/admin/remove-subscription" method="POST" class="inline">
                                             <input type="hidden" name="userId" value="<%= u.id %>" />
                                             <button type="submit" class="btn btn-sm btn-error btn-outline">
@@ -113,14 +113,9 @@
                 <div class="form-control w-full">
                     <label class="label"><span class="label-text">Select Preset Package</span></label>
                     <select name="subType" class="select select-bordered w-full" required>
-                        <option value="1M_CREDITS">1M Credits (Expires monthly)</option>
-                        <option value="UNLIMITED">Unlimited Credits (Expires monthly)</option>
+                        <option value="CREDITS_1M">1M Credits (1 month)</option>
+                        <option value="UNLIMITED_1M">Unlimited Credits (1 month)</option>
                     </select>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text">Purchase Duration (n Months)</span></label>
-                    <input type="number" name="months" class="input input-bordered w-full" min="1" value="1" required />
                 </div>
 
                 <div class="modal-action">

@@ -48,12 +48,16 @@ const worker = new Worker(
 
         const deductResult = await db.execute(sql`
             UPDATE subscription
-            SET balance = CASE WHEN is_unlimited = true THEN balance ELSE balance - ${cost} END,
+            SET credits_remaining = CASE
+                    WHEN plan_type = 'UNLIMITED_1M' THEN credits_remaining
+                    ELSE credits_remaining - ${cost}
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = ${userId}
-              AND subscription_ends_at >= CURRENT_TIMESTAMP
-              AND (is_unlimited = true OR balance >= ${cost})
-            RETURNING user_id
+              AND status = 'active'
+              AND current_period_end > CURRENT_TIMESTAMP
+              AND (plan_type = 'UNLIMITED_1M' OR credits_remaining >= ${cost})
+            RETURNING user_id, plan_type
         `);
 
         const rows = deductResult.rows || deductResult;
@@ -161,7 +165,10 @@ worker.on('failed', async (job, err) => {
         try {
             await db.execute(sql`
                 UPDATE subscription
-                SET balance = CASE WHEN is_unlimited = true THEN balance ELSE balance + ${cost} END,
+                SET credits_remaining = CASE
+                        WHEN plan_type = 'UNLIMITED_1M' THEN credits_remaining
+                        ELSE credits_remaining + ${cost}
+                    END,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ${job.data.userId}
             `);

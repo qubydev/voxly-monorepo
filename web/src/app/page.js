@@ -77,6 +77,7 @@ export default function Dashboard() {
     errorMessage: null
   })
   const [credits, setCredits] = useState('Loading...')
+  const [isUnlimited, setIsUnlimited] = useState(false)
 
   // Refs for polling control
   const pollTimeoutRef = useRef(null)
@@ -146,6 +147,7 @@ export default function Dashboard() {
       })
 
       setCredits(data.credits || 0)
+      setIsUnlimited(Boolean(data.isUnlimited))
 
       if (nextJobId && isActive) {
         activeJobIdRef.current = nextJobId
@@ -228,7 +230,7 @@ export default function Dashboard() {
     const creditsNeeded = text.length
     const creditsAvailable = typeof credits === 'number' ? credits : 0
 
-    if (creditsAvailable < creditsNeeded) {
+    if (!isUnlimited && creditsAvailable < creditsNeeded) {
       return toast.error(
         `Insufficient credits. Need ${creditsNeeded.toLocaleString()}, you have ${creditsAvailable.toLocaleString()}`
       )
@@ -342,6 +344,7 @@ export default function Dashboard() {
   const audioUrl = jobState.audioUrl
   const creditsNeeded = text.length
   const creditsAvailable = typeof credits === 'number' ? credits : 0
+  const displayCredits = isUnlimited ? 'Unlimited' : credits
 
   if (isPending || !session) return <Loader />
 
@@ -377,7 +380,7 @@ export default function Dashboard() {
             <DropdownMenuSeparator />
             <div className='flex flex-col gap-2'>
               <p className='flex items-center gap-1 px-3 py-2 text-sm'>
-                <RiCopperCoinFill className='mr-1' /> Credits: {credits}
+                <RiCopperCoinFill className='mr-1' /> Credits: {displayCredits}
               </p>
               <Button className="w-full" variant='destructive' onClick={() => authClient.signOut()}>
                 Logout
