@@ -23,6 +23,7 @@ export async function GET(req) {
             .select({
                 id: ttsJobs.id,
                 status: ttsJobs.status,
+                fileName: ttsJobs.fileName,
                 finishedChunks: ttsJobs.finishedChunks,
                 totalChunks: ttsJobs.totalChunks,
                 timeTaken: ttsJobs.timeTaken,
@@ -40,10 +41,10 @@ export async function GET(req) {
         const job = result[0];
         let audioUrl = null;
 
-        if (job.status === 'completed') {
+        if (job.status === 'completed' && job.fileName) {
             const { data, error } = await supabase.storage
                 .from('tts-audio')
-                .createSignedUrl(`tts-${userId}.mp3`, 3600);
+                .createSignedUrl(job.fileName, 3600);
 
             if (!error && data) {
                 audioUrl = data.signedUrl;

@@ -45,7 +45,7 @@ const worker = new Worker(
         await job.updateProgress(95);
 
         const bucket = 'tts-audio';
-        const fileName = `tts-${userId}.mp3`;
+        const fileName = `tts-${userId}-${databaseId}.mp3`;
 
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Supabase Storage.`);
 
@@ -55,7 +55,7 @@ const worker = new Worker(
                 .from(bucket)
                 .upload(fileName, finalAudioBuffer, {
                     contentType: 'audio/mpeg',
-                    upsert: true
+                    upsert: false
                 });
 
             if (error) {
@@ -78,7 +78,7 @@ const worker = new Worker(
         await job.updateProgress(100);
 
         try {
-            await db.execute(sql`UPDATE tts_jobs SET status = 'completed', time_taken = ${timeTaken}, updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
+            await db.execute(sql`UPDATE tts_jobs SET status = 'completed', file_name = ${fileName}, time_taken = ${timeTaken}, updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database status updated to 'completed'.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating status to 'completed' in database.`, dbError.stack);

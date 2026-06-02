@@ -58,6 +58,7 @@ export const ttsJobs = pgTable("tts_jobs", {
     textContent: text("text_content"),
     voice: varchar("voice", { length: 50 }),
     status: jobStatus("status").default('pending'),
+    fileName: text("file_name"),
     finishedChunks: integer("finished_chunks").default(0),
     totalChunks: integer("total_chunks").default(0),
     timeTaken: numeric("time_taken", { precision: 10, scale: 2 }),
