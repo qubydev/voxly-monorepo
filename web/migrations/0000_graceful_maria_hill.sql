@@ -1,3 +1,4 @@
+CREATE TYPE "public"."job_status" AS ENUM('pending', 'processing', 'completed', 'failed');--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"userId" text NOT NULL,
@@ -24,6 +25,20 @@ CREATE TABLE "session" (
 	"createdAt" timestamp NOT NULL,
 	"updatedAt" timestamp NOT NULL,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "tts_jobs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" varchar(255) NOT NULL,
+	"text_content" text,
+	"voice" varchar(50),
+	"status" "job_status" DEFAULT 'pending',
+	"finished_chunks" integer DEFAULT 0,
+	"total_chunks" integer DEFAULT 0,
+	"time_taken" numeric(10, 2),
+	"error_message" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "user" (
