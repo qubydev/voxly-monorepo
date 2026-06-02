@@ -1,13 +1,11 @@
 require('dotenv').config();
 const { Worker } = require('bullmq');
 const IORedis = require('ioredis');
-const crypto = require('crypto');
 const { processTTS } = require('./ttsService');
 const db = require('./db');
 const { supabase } = require('./supabase');
 const { QUEUE_NAME } = require('./config');
 const { sql } = require('drizzle-orm');
-const {eq} = require('drizzle-orm');
 
 const redisConnection = new IORedis(process.env.REDIS_URL, {
     maxRetriesPerRequest: null,
@@ -47,26 +45,8 @@ const worker = new Worker(
         await job.updateProgress(95);
 
         const bucket = 'tts-audio';
-        const prefix = `${userId}/`;
+        const fileName = `tts-${userId}.mp3`;
 
-        try {
-            const { data: existingFiles } = await supabase.storage
-                .from(bucket)
-                .list(prefix);
-
-            if (existingFiles && existingFiles.length > 0) {
-                const filesToDelete = existingFiles.map(f => `${prefix}${f.name}`);
-                console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Found ${filesToDelete.length} existing files. Deleting...`);
-                await supabase.storage
-                    .from(bucket)
-                    .remove(filesToDelete);
-            }
-        } catch (cleanupError) {
-            console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed to clean up existing files.`, cleanupError.stack);
-        }
-
-        const uniqueId = crypto.randomUUID();
-        const fileName = `${userId}/${uniqueId}.mp3`;
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Uploading filename '${fileName}' to Supabase Storage.`);
 
         let fileUrl;

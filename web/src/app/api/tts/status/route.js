@@ -41,18 +41,12 @@ export async function GET(req) {
         let audioUrl = null;
 
         if (job.status === 'completed') {
-            const { data: files } = await supabase.storage
+            const { data, error } = await supabase.storage
                 .from('tts-audio')
-                .list(userId);
+                .createSignedUrl(`tts-${userId}.mp3`, 3600);
 
-            if (files && files.length > 0) {
-                const { data, error } = await supabase.storage
-                    .from('tts-audio')
-                    .createSignedUrl(`${userId}/${files[0].name}`, 3600);
-
-                if (!error && data) {
-                    audioUrl = data.signedUrl;
-                }
+            if (!error && data) {
+                audioUrl = data.signedUrl;
             }
         }
 
