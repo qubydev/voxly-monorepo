@@ -11,6 +11,7 @@ export default function LoginPage() {
                     src="/login.jpg"
                     alt="Login visual"
                     fill
+                    sizes="50vw"
                     className="object-cover"
                 />
             </div>
