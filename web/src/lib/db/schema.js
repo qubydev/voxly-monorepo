@@ -56,7 +56,7 @@ export const ttsJobs = pgTable("tts_jobs", {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: varchar("user_id", { length: 255 }).notNull(),
     textContent: text("text_content"),
-    voice: varchar("voice", { length: 50 }),
+    voice: varchar("voice", { length: 100 }),
     status: jobStatus("status").default('pending'),
     fileName: text("file_name"),
     finishedChunks: integer("finished_chunks").default(0),

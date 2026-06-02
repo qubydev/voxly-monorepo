@@ -18,7 +18,7 @@ import {
 import Image from 'next/image'
 
 const CHAR_LIMIT = 30000
-const defaultVoice = { id: '1', name: 'Aria', accent: 'American English', gender: 'Female', style: 'Conversational' }
+const defaultVoice = { id: 'en-US-EmmaMultilingualNeural', name: 'Emma', gender: 'Female', language: 'English', country: 'United States' }
 const defaultSettings = { speed: 50, stability: 50, similarity: 75 }
 
 export default function Dashboard() {
@@ -115,7 +115,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          voice: selectedVoice.name.toLowerCase()
+          voice: selectedVoice.id
         })
       })
 
@@ -148,7 +148,7 @@ export default function Dashboard() {
 
       const a = document.createElement('a')
       a.href = blobUrl
-      a.download = `voxly-${selectedVoice.name.toLowerCase()}-${Date.now()}.mp3`
+      a.download = `voxly-${selectedVoice.name}-${Date.now()}.mp3`
       document.body.appendChild(a)
       a.click()
 

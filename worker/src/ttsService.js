@@ -6,32 +6,29 @@ const os = require('os');
 const pLimit = require('p-limit').default;
 const { splitText } = require('./textSplitter');
 const { MAX_PARALLEL_THREADS, DEFAULT_VOICE } = require('./config');
-
-const voiceMap = {
-    aria: 'en-US-AriaNeural',
-    guy: 'en-US-GuyNeural',
-    sonia: 'en-GB-SoniaNeural',
-    ryan: 'en-GB-RyanNeural',
-    elvira: 'es-ES-ElviraNeural',
-    denise: 'fr-FR-DeniseNeural',
-    conrad: 'de-DE-ConradNeural',
-    isabella: 'it-IT-IsabellaNeural',
-    nanami: 'ja-JP-NanamiNeural',
-    francisca: 'pt-BR-FranciscaNeural',
-};
+const { VOICES } = require('./voices');
 
 const limit = pLimit(MAX_PARALLEL_THREADS);
+const VALID_VOICES = new Set(VOICES.map(v => v.id));
 
 async function generateAudioFromProvider(chunk, voice, retries = 3) {
-    const edgeVoice = voiceMap[voice] || voiceMap[DEFAULT_VOICE];
-    const tempFile = join(os.tmpdir(), `tts-chunk-${randomBytes(8).toString('hex')}.mp3`);
+    const selectedVoice = VALID_VOICES.has(voice)
+        ? voice
+        : DEFAULT_VOICE;
+
+    const tempFile = join(
+        os.tmpdir(),
+        `tts-chunk-${randomBytes(8).toString('hex')}.mp3`
+    );
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            const tts = new EdgeTTS({ voice: edgeVoice });
+            const tts = new EdgeTTS({ voice: selectedVoice });
             await tts.ttsPromise(chunk, tempFile);
+
             const buffer = await readFile(tempFile);
             await unlink(tempFile);
+
             return buffer;
         } catch (error) {
             try {
@@ -39,7 +36,12 @@ async function generateAudioFromProvider(chunk, voice, retries = 3) {
             } catch { }
 
             if (attempt === retries) {
-                throw new Error(error?.message || (typeof error === 'string' ? error : "Provider disconnected"));
+                throw new Error(
+                    error?.message ||
+                    (typeof error === 'string'
+                        ? error
+                        : 'Provider disconnected')
+                );
             }
 
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
@@ -57,12 +59,15 @@ async function processTTS(text, voice, onProgress) {
         await onProgress(completedChunks, totalChunks);
     }
 
-    const tasks = chunks.map((chunk) =>
+    const tasks = chunks.map(chunk =>
         limit(async () => {
-            if (hasFailed) throw new Error("Job aborted due to previous chunk failure");
+            if (hasFailed) {
+                throw new Error('Job aborted due to previous chunk failure');
+            }
 
             try {
                 const buffer = await generateAudioFromProvider(chunk, voice);
+
                 completedChunks++;
 
                 if (onProgress) {
@@ -78,6 +83,7 @@ async function processTTS(text, voice, onProgress) {
     );
 
     const audioBuffers = await Promise.all(tasks);
+
     return Buffer.concat(audioBuffers);
 }
 

@@ -24,7 +24,6 @@ export async function POST(req) {
             return Response.json({ error: 'Text is required' }, { status: 400 });
         }
 
-        // Check for active jobs
         const activeJobs = await db
             .select({ id: ttsJobs.id })
             .from(ttsJobs)
@@ -42,13 +41,12 @@ export async function POST(req) {
             }, { status: 400 });
         }
 
-        // Insert new job
         const result = await db
             .insert(ttsJobs)
             .values({
                 userId: userId,
                 textContent: text,
-                voice: voice || 'aria',
+                voice: voice || 'en-US-EmmaMultilingualNeural',
                 status: 'pending'
             })
             .returning({ id: ttsJobs.id });
@@ -57,7 +55,7 @@ export async function POST(req) {
 
         const job = await ttsQueue.add('generate-tts', {
             text,
-            voice: voice || 'aria',
+            voice: voice || 'en-US-EmmaMultilingualNeural',
             databaseId,
             userId
         });
