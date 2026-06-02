@@ -12,6 +12,31 @@ const redisConnection = new IORedis(process.env.REDIS_URL, {
     tls: { rejectUnauthorized: false }
 });
 
+function userFacingError(errorMessage) {
+    const message = String(errorMessage || '').toLowerCase();
+
+    if (message === 'insufficient_credits') {
+        return 'Insufficient credits.';
+    }
+
+    if (
+        message.includes('provider') ||
+        message.includes('edge') ||
+        message.includes('socket') ||
+        message.includes('timeout') ||
+        message.includes('disconnected') ||
+        message.includes('aborted due to previous chunk failure')
+    ) {
+        return 'Speech generation failed while contacting the voice provider. Your credits were refunded. Please try again.';
+    }
+
+    if (message.includes('storage') || message.includes('supabase') || message.includes('upload')) {
+        return 'Audio was generated, but saving it failed. Your credits were refunded. Please try again.';
+    }
+
+    return 'Generation failed. Your credits were refunded. Please try again.';
+}
+
 const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
@@ -128,6 +153,7 @@ worker.on('completed', (job) => {
 
 worker.on('failed', async (job, err) => {
     const errorMessage = err?.message || String(err) || "Unknown Error";
+    const displayErrorMessage = userFacingError(errorMessage);
     console.error(`[${new Date().toISOString()}] [CRITICAL] [Job ${job?.id || 'UNKNOWN'}] Process execution failed: ${errorMessage}`, err?.stack || err);
 
     if (job?.data?.userId && errorMessage !== "INSUFFICIENT_CREDITS") {
@@ -147,7 +173,13 @@ worker.on('failed', async (job, err) => {
 
     if (job?.data?.databaseId) {
         try {
-            await db.execute(sql`UPDATE tts_jobs SET status = 'failed', error_message = ${errorMessage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${job.data.databaseId}`);
+            await db.execute(sql`
+                UPDATE tts_jobs
+                SET status = 'failed',
+                    error_message = ${displayErrorMessage},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${job.data.databaseId}
+            `);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database successfully updated with failure trace.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Database write failed during error handler execution.`, dbError.stack);

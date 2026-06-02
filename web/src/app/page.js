@@ -29,9 +29,23 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { RiCopperCoinFill } from "react-icons/ri"
 
 const CHAR_LIMIT = 30000
-const POLL_INTERVAL = 1000
+const ACTIVE_JOB_STORAGE_KEY = 'voxly_active_job_id'
+const POLL_INTERVAL = 2000
+const BACKGROUND_POLL_INTERVAL = 8000
 const defaultVoice = { id: 'en-US-EmmaMultilingualNeural', name: 'Emma', gender: 'Female', language: 'English', country: 'United States' }
 const defaultSettings = { speed: 50, stability: 50, similarity: 75 }
+const ACTIVE_STATUSES = new Set(['pending', 'processing'])
+
+function readStoredJson(key, fallback) {
+  if (typeof window === 'undefined') return fallback
+
+  try {
+    const value = localStorage.getItem(key)
+    return value ? JSON.parse(value) : fallback
+  } catch {
+    return fallback
+  }
+}
 
 export default function Dashboard() {
   const router = useRouter()
@@ -42,9 +56,12 @@ export default function Dashboard() {
   const imageFallback = name ? name.charAt(0) : '?'
 
   // Text and settings state
-  const [text, setText] = useState('')
-  const [selectedVoice, setSelectedVoice] = useState(defaultVoice)
-  const [settings, setSettings] = useState(defaultSettings)
+  const [text, setText] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return localStorage.getItem('voxly_text') || ''
+  })
+  const [selectedVoice, setSelectedVoice] = useState(() => readStoredJson('voxly_voice', defaultVoice))
+  const [settings, setSettings] = useState(() => readStoredJson('voxly_settings', defaultSettings))
 
   // UI state
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
@@ -63,90 +80,108 @@ export default function Dashboard() {
 
   // Refs for polling control
   const pollTimeoutRef = useRef(null)
+  const pollStatusRef = useRef(null)
   const lastErrorShownRef = useRef(null)
+  const activeJobIdRef = useRef(null)
+
+  const clearPollTimeout = useCallback(() => {
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+  }, [])
+
+  const getStatusUrl = useCallback((jobId) => {
+    if (!jobId) return '/api/tts/status'
+    return `/api/tts/status?jobId=${encodeURIComponent(jobId)}`
+  }, [])
+
+  const scheduleStatusPoll = useCallback((jobId) => {
+    if (!jobId) return
+
+    const interval = document.hidden ? BACKGROUND_POLL_INTERVAL : POLL_INTERVAL
+    pollTimeoutRef.current = setTimeout(() => {
+      pollStatusRef.current?.({ jobId, isInitialCheck: false })
+    }, interval)
+  }, [])
 
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current)
-      }
+      clearPollTimeout()
     }
-  }, [])
+  }, [clearPollTimeout])
 
-  // Enhanced polling function with error deduplication
+  // Recoverable polling function with active job persistence and error deduplication
   const pollStatus = useCallback(async (options = {}) => {
-    const { isInitialCheck = false } = options
+    const {
+      isInitialCheck = false,
+      jobId = activeJobIdRef.current,
+      scheduleNext = true
+    } = options
+
+    clearPollTimeout()
 
     try {
-      const res = await fetch('/api/tts/status')
+      const res = await fetch(getStatusUrl(jobId))
       if (!res.ok) {
         if (isInitialCheck) setIsInitializing(false)
+        if (scheduleNext && jobId) {
+          scheduleStatusPoll(jobId)
+        }
         return
       }
 
       const data = await res.json()
+      const nextJobId = data.jobId || jobId || null
+      const isActive = ACTIVE_STATUSES.has(data.status)
 
       // Update job state
-      setJobState(prev => ({
+      setJobState({
         status: data.status,
         finishedChunks: data.finishedChunks || 0,
         totalChunks: data.totalChunks || 0,
         audioUrl: data.audioUrl || null,
         errorMessage: data.errorMessage || null
-      }))
+      })
 
       setCredits(data.credits || 0)
 
-      // Handle different status states
-      if (data.status === 'pending' || data.status === 'processing') {
+      if (nextJobId && isActive) {
+        activeJobIdRef.current = nextJobId
+        localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, nextJobId)
+      } else if (nextJobId && activeJobIdRef.current === nextJobId) {
+        activeJobIdRef.current = null
+        localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY)
+      }
+
+      if (isActive && scheduleNext) {
         // Continue polling for active jobs
-        pollTimeoutRef.current = setTimeout(
-          () => pollStatus({ isInitialCheck: false }),
-          POLL_INTERVAL
-        )
+        scheduleStatusPoll(nextJobId)
       } else if (data.status === 'failed') {
         // Show error toast only once per failure
-        const errorKey = `${data.errorMessage}-${Date.now()}`
-        if (lastErrorShownRef.current !== errorKey && !isInitialCheck) {
+        const errorKey = `${nextJobId || 'latest'}:${data.errorMessage || 'Generation failed.'}`
+        if (lastErrorShownRef.current !== errorKey) {
           toast.error(data.errorMessage || 'Generation failed.')
           lastErrorShownRef.current = errorKey
         }
       } else if (data.status === 'completed') {
-        // Success state - toast already shown if needed
         lastErrorShownRef.current = null
       }
 
       if (isInitialCheck) setIsInitializing(false)
     } catch (err) {
       console.error('Polling error:', err)
+      if (scheduleNext && jobId) {
+        scheduleStatusPoll(jobId)
+      }
       if (isInitialCheck) setIsInitializing(false)
     }
-  }, [])
+  }, [clearPollTimeout, getStatusUrl, scheduleStatusPoll])
 
-  // Load saved preferences on mount
   useEffect(() => {
-    const savedText = localStorage.getItem('voxly_text')
-    if (savedText) setText(savedText)
-
-    const savedVoice = localStorage.getItem('voxly_voice')
-    if (savedVoice) {
-      try {
-        setSelectedVoice(JSON.parse(savedVoice))
-      } catch (e) {
-        console.error('Failed to parse saved voice', e)
-      }
-    }
-
-    const savedSettings = localStorage.getItem('voxly_settings')
-    if (savedSettings) {
-      try {
-        setSettings(JSON.parse(savedSettings))
-      } catch (e) {
-        console.error('Failed to parse saved settings', e)
-      }
-    }
-  }, [])
+    pollStatusRef.current = pollStatus
+  }, [pollStatus])
 
   // Debounced localStorage saves - only save when input stops
   useEffect(() => {
@@ -167,7 +202,13 @@ export default function Dashboard() {
   // Initial status check when session is ready
   useEffect(() => {
     if (!isPending && session) {
-      pollStatus({ isInitialCheck: true })
+      const savedJobId = localStorage.getItem(ACTIVE_JOB_STORAGE_KEY)
+      activeJobIdRef.current = savedJobId
+      const timer = setTimeout(() => {
+        pollStatus({ isInitialCheck: true, jobId: savedJobId })
+      }, 0)
+
+      return () => clearTimeout(timer)
     }
   }, [isPending, session, pollStatus])
 
@@ -194,7 +235,10 @@ export default function Dashboard() {
     }
 
     // Reset error tracking and set initial state IMMEDIATELY for instant UI feedback
+    clearPollTimeout()
     lastErrorShownRef.current = null
+    activeJobIdRef.current = null
+    localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY)
     setJobState({
       status: 'pending',
       finishedChunks: 0,
@@ -228,8 +272,14 @@ export default function Dashboard() {
         return
       }
 
-      // Start polling immediately after generation request
-      pollStatus({ isInitialCheck: false })
+      const activeJobId = data.jobId || data.job?.databaseId
+      if (activeJobId) {
+        activeJobIdRef.current = activeJobId
+        localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, activeJobId)
+      }
+
+      // Start polling the exact database job immediately after generation request
+      pollStatus({ isInitialCheck: false, jobId: activeJobId })
     } catch (err) {
       console.error('Generation error:', err)
       // Reset state on error

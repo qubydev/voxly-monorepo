@@ -1,11 +1,12 @@
 import { db } from '@/lib/db';
 import { ttsJobs, subscription } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import { supabase } from '@/lib/supabase';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function GET(req) {
     try {
@@ -18,6 +19,9 @@ export async function GET(req) {
         }
 
         const userId = session.user.id;
+        const { searchParams } = new URL(req.url);
+        const rawJobId = searchParams.get('jobId');
+        const requestedJobId = rawJobId && UUID_PATTERN.test(rawJobId) ? rawJobId : null;
 
         const [jobResult, subResult] = await Promise.all([
             db
@@ -31,7 +35,11 @@ export async function GET(req) {
                     errorMessage: ttsJobs.errorMessage,
                 })
                 .from(ttsJobs)
-                .where(eq(ttsJobs.userId, userId))
+                .where(
+                    requestedJobId
+                        ? and(eq(ttsJobs.userId, userId), eq(ttsJobs.id, requestedJobId))
+                        : eq(ttsJobs.userId, userId)
+                )
                 .orderBy(desc(ttsJobs.createdAt))
                 .limit(1),
             db

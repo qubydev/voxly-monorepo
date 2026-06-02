@@ -54,6 +54,7 @@ async function processTTS(text, voice, onProgress) {
     const totalChunks = chunks.length;
     let completedChunks = 0;
     let hasFailed = false;
+    let failureError = null;
 
     if (onProgress) {
         await onProgress(completedChunks, totalChunks);
@@ -62,7 +63,7 @@ async function processTTS(text, voice, onProgress) {
     const tasks = chunks.map(chunk =>
         limit(async () => {
             if (hasFailed) {
-                throw new Error('Job aborted due to previous chunk failure');
+                throw failureError || new Error('Job aborted due to previous chunk failure');
             }
 
             try {
@@ -77,6 +78,7 @@ async function processTTS(text, voice, onProgress) {
                 return buffer;
             } catch (error) {
                 hasFailed = true;
+                failureError = failureError || error;
                 throw error;
             }
         })

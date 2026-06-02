@@ -72,15 +72,23 @@ export async function POST(req) {
 
         const databaseId = result[0].id;
 
-        const job = await ttsQueue.add('generate-tts', {
-            text,
-            voice: voice || 'en-US-EmmaMultilingualNeural',
-            databaseId,
-            userId
-        });
+        const job = await ttsQueue.add(
+            'generate-tts',
+            {
+                text,
+                voice: voice || 'en-US-EmmaMultilingualNeural',
+                databaseId,
+                userId
+            },
+            {
+                removeOnComplete: { age: 3600, count: 1000 },
+                removeOnFail: { age: 86400, count: 1000 }
+            }
+        );
 
         return Response.json({
             success: true,
+            jobId: databaseId,
             job: {
                 id: job.id,
                 databaseId,
