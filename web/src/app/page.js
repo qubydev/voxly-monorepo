@@ -19,8 +19,6 @@ import Image from 'next/image'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -363,6 +361,10 @@ export default function Dashboard() {
           <span className="text-sm font-semibold">VOXLY</span>
         </div>
         <div className='flex-1' />
+        <div className='mr-4 flex items-center gap-1.5 border border-border px-2 py-1 text-sm text-muted-foreground'>
+          <RiCopperCoinFill className='text-primary' />
+          <span className='font-semibold text-primary'>{displayCredits}</span>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild className="cursor-pointer">
             <Avatar className="border border-primary">
@@ -378,10 +380,7 @@ export default function Dashboard() {
               </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <div className='flex flex-col gap-2'>
-              <p className='flex items-center gap-1 px-3 py-2 text-sm'>
-                <RiCopperCoinFill className='mr-1' /> Credits: {displayCredits}
-              </p>
+            <div className='px-2 py-2'>
               <Button className="w-full" variant='destructive' onClick={() => authClient.signOut()}>
                 Logout
               </Button>
