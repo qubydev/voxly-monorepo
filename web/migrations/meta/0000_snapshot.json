@@ -1,5 +1,5 @@
 {
-  "id": "1bdc0ce2-3e57-4c45-8093-35b10725f538",
+  "id": "d7ca4d1a-272a-493e-8e09-5d29feb1d33a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -192,6 +192,103 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.subscription": {
+      "name": "subscription",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "unlimited": {
+          "name": "unlimited",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "balance": {
+          "name": "balance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "balance_credited": {
+          "name": "balance_credited",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "subscription_expiry_idx": {
+          "name": "subscription_expiry_idx",
+          "columns": [
+            {
+              "expression": "ends_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "subscription_user_id_user_id_fk": {
+          "name": "subscription_user_id_user_id_fk",
+          "tableFrom": "subscription",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tts_jobs": {
       "name": "tts_jobs",
       "schema": "",
@@ -217,7 +314,7 @@
         },
         "voice": {
           "name": "voice",
-          "type": "varchar(50)",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -228,6 +325,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'pending'"
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "finished_chunks": {
           "name": "finished_chunks",
@@ -251,6 +354,12 @@
         },
         "error_message": {
           "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_log": {
+          "name": "error_log",
           "type": "text",
           "primaryKey": false,
           "notNull": false

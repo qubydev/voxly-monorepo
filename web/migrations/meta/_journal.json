@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1780336723998,
-      "tag": "0000_graceful_maria_hill",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1780388030833,
-      "tag": "0001_brown_mentor",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1780393470636,
-      "tag": "0002_certain_gravity",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1780395922106,
-      "tag": "0003_daffy_madrox",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1780416641378,
-      "tag": "0004_fluffy_prodigy",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1780416868763,
-      "tag": "0005_brief_rachel_grey",
+      "when": 1780460966488,
+      "tag": "0000_easy_mulholland_black",
       "breakpoints": true
     }
   ]

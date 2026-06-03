@@ -12,29 +12,45 @@ const redisConnection = new IORedis(process.env.REDIS_URL, {
     tls: { rejectUnauthorized: false }
 });
 
-function userFacingError(errorMessage) {
-    const message = String(errorMessage || '').toLowerCase();
-
-    if (message === 'insufficient_credits') {
+function getPublicErrorMessage(errorMessage) {
+    if (errorMessage === 'INSUFFICIENT_CREDITS') {
         return 'Insufficient credits.';
     }
 
-    if (
-        message.includes('provider') ||
-        message.includes('edge') ||
-        message.includes('socket') ||
-        message.includes('timeout') ||
-        message.includes('disconnected') ||
-        message.includes('aborted due to previous chunk failure')
-    ) {
-        return 'Speech generation failed while contacting the voice provider. Your credits were refunded. Please try again.';
+    return 'Generation failed. Your credits were refunded.';
+}
+
+function serializeError(error) {
+    if (!error) {
+        return { message: 'Unknown Error' };
     }
 
-    if (message.includes('storage') || message.includes('supabase') || message.includes('upload')) {
-        return 'Audio was generated, but saving it failed. Your credits were refunded. Please try again.';
+    if (error instanceof Error) {
+        return {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            cause: error.cause ? serializeError(error.cause) : undefined,
+        };
     }
 
-    return 'Generation failed. Your credits were refunded. Please try again.';
+    return {
+        message: typeof error === 'string' ? error : JSON.stringify(error),
+        raw: error,
+    };
+}
+
+function buildFailureLog(job, error) {
+    return {
+        failedAt: new Date().toISOString(),
+        queueJobId: job?.id || null,
+        databaseId: job?.data?.databaseId || null,
+        userId: job?.data?.userId || null,
+        voice: job?.data?.voice || null,
+        textLength: job?.data?.text?.length || 0,
+        attemptsMade: job?.attemptsMade ?? null,
+        error: serializeError(error),
+    };
 }
 
 const worker = new Worker(
@@ -48,16 +64,15 @@ const worker = new Worker(
 
         const deductResult = await db.execute(sql`
             UPDATE subscription
-            SET credits_remaining = CASE
-                    WHEN plan_type = 'UNLIMITED_1M' THEN credits_remaining
-                    ELSE credits_remaining - ${cost}
+            SET balance = CASE
+                    WHEN unlimited = true THEN balance
+                    ELSE balance - ${cost}
                 END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = ${userId}
-              AND status = 'active'
-              AND current_period_end > CURRENT_TIMESTAMP
-              AND (plan_type = 'UNLIMITED_1M' OR credits_remaining >= ${cost})
-            RETURNING user_id, plan_type
+              AND ends_at > CURRENT_TIMESTAMP
+              AND (unlimited = true OR balance >= ${cost})
+            RETURNING user_id, unlimited
         `);
 
         const rows = deductResult.rows || deductResult;
@@ -69,7 +84,14 @@ const worker = new Worker(
         console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Deducted ${cost} credits from user ${userId}.`);
 
         try {
-            await db.execute(sql`UPDATE tts_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
+            await db.execute(sql`
+                UPDATE tts_jobs
+                SET status = 'processing',
+                    error_message = NULL,
+                    error_log = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${databaseId}
+            `);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database marked as 'processing'.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating status to 'processing' in database.`, dbError.stack);
@@ -126,7 +148,16 @@ const worker = new Worker(
         await job.updateProgress(100);
 
         try {
-            await db.execute(sql`UPDATE tts_jobs SET status = 'completed', file_name = ${fileName}, time_taken = ${timeTaken}, updated_at = CURRENT_TIMESTAMP WHERE id = ${databaseId}`);
+            await db.execute(sql`
+                UPDATE tts_jobs
+                SET status = 'completed',
+                    file_name = ${fileName},
+                    time_taken = ${timeTaken},
+                    error_message = NULL,
+                    error_log = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${databaseId}
+            `);
             console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database status updated to 'completed'.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Failed updating status to 'completed' in database.`, dbError.stack);
@@ -157,17 +188,20 @@ worker.on('completed', (job) => {
 
 worker.on('failed', async (job, err) => {
     const errorMessage = err?.message || String(err) || "Unknown Error";
-    const displayErrorMessage = userFacingError(errorMessage);
-    console.error(`[${new Date().toISOString()}] [CRITICAL] [Job ${job?.id || 'UNKNOWN'}] Process execution failed: ${errorMessage}`, err?.stack || err);
+    const displayErrorMessage = getPublicErrorMessage(errorMessage);
+    const failureLog = buildFailureLog(job, err);
+    const failureLogText = JSON.stringify(failureLog, null, 2);
+
+    console.error(`[${new Date().toISOString()}] [CRITICAL] TTS job failed\n${failureLogText}`);
 
     if (job?.data?.userId && errorMessage !== "INSUFFICIENT_CREDITS") {
         const cost = job.data.text?.length || 0;
         try {
             await db.execute(sql`
                 UPDATE subscription
-                SET credits_remaining = CASE
-                        WHEN plan_type = 'UNLIMITED_1M' THEN credits_remaining
-                        ELSE credits_remaining + ${cost}
+                SET balance = CASE
+                        WHEN unlimited = true THEN balance
+                        ELSE balance + ${cost}
                     END,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ${job.data.userId}
@@ -184,10 +218,11 @@ worker.on('failed', async (job, err) => {
                 UPDATE tts_jobs
                 SET status = 'failed',
                     error_message = ${displayErrorMessage},
+                    error_log = ${failureLogText},
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ${job.data.databaseId}
             `);
-            console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database successfully updated with failure trace.`);
+            console.log(`[${new Date().toISOString()}] [INFO] [Job ${job.id}] Database updated with public error message and private error log.`);
         } catch (dbError) {
             console.error(`[${new Date().toISOString()}] [ERROR] [Job ${job.id}] Database write failed during error handler execution.`, dbError.stack);
         }

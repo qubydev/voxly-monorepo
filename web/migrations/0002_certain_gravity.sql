@@ -1,1 +1,0 @@
-ALTER TABLE "tts_jobs" ALTER COLUMN "voice" SET DATA TYPE varchar(100);

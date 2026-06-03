@@ -32,9 +32,8 @@
                     <tr>
                         <th>User</th>
                         <th>Email</th>
-                        <th>Plan Type</th>
+                        <th>Plan</th>
                         <th>Credits</th>
-                        <th>Status</th>
                         <th>Subscription Expiry</th>
                         <th class="text-right">Actions</th>
                     </tr>
@@ -64,21 +63,15 @@
                                 <%= u.email %>
                             </td>
                             <td>
-                                <span
-                                    class="badge <%= u.planType ? 'badge-primary' : 'badge-ghost' %>">
-                                    <%= u.planType || 'NONE' %>
+                                <span class="badge <%= u.unlimited || u.balance > 0 ? 'badge-primary' : 'badge-ghost' %>">
+                                    <%= u.unlimited ? 'Unlimited' : ((u.balance || 0) > 0 ? 'Credits' : 'NONE') %>
                                 </span>
                             </td>
                             <td class="font-mono">
-                                <%= u.planType === 'UNLIMITED_1M' ? 'Unlimited' : ((u.creditsRemaining !== null && u.creditsRemaining !== undefined) ? u.creditsRemaining.toLocaleString() : 0) %>
+                                <%= u.unlimited ? 'Unlimited' : ((u.balance !== null && u.balance !== undefined) ? u.balance.toLocaleString() : 0) %>
                             </td>
                             <td>
-                                <span class="badge <%= u.status === 'active' ? 'badge-success' : 'badge-neutral' %> text-xs">
-                                    <%= u.status || 'none' %>
-                                </span>
-                            </td>
-                            <td>
-                                <%= u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toLocaleDateString()
+                                <%= u.endsAt ? new Date(u.endsAt).toLocaleDateString()
                                     : 'No Active Plan' %>
                             </td>
                             <td class="text-right project-actions">
@@ -87,7 +80,7 @@
                                         class="btn btn-sm btn-primary">
                                         Assign Plan
                                     </button>
-                                    <% if (u.status === 'active') { %>
+                                    <% if (u.unlimited || (u.balance || 0) > 0) { %>
                                         <form action="/admin/remove-subscription" method="POST" class="inline">
                                             <input type="hidden" name="userId" value="<%= u.id %>" />
                                             <button type="submit" class="btn btn-sm btn-error btn-outline">
@@ -113,8 +106,8 @@
                 <div class="form-control w-full">
                     <label class="label"><span class="label-text">Select Preset Package</span></label>
                     <select name="subType" class="select select-bordered w-full" required>
-                        <option value="CREDITS_1M">1M Credits (1 month)</option>
-                        <option value="UNLIMITED_1M">Unlimited Credits (1 month)</option>
+                        <option value="CREDITS_2M">2M Credits (1 month)</option>
+                        <option value="UNLIMITED">Unlimited Credits (1 month)</option>
                     </select>
                 </div>
 

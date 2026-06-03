@@ -44,10 +44,9 @@ export async function GET(req) {
                 .limit(1),
             db
                 .select({
-                    planType: subscription.planType,
-                    status: subscription.status,
-                    creditsRemaining: subscription.creditsRemaining,
-                    currentPeriodEnd: subscription.currentPeriodEnd,
+                    unlimited: subscription.unlimited,
+                    balance: subscription.balance,
+                    endsAt: subscription.endsAt,
                 })
                 .from(subscription)
                 .where(eq(subscription.userId, userId))
@@ -57,19 +56,18 @@ export async function GET(req) {
         const sub = subResult[0];
         const hasActivePlan = Boolean(
             sub &&
-            sub.status === 'active' &&
-            sub.currentPeriodEnd &&
-            new Date(sub.currentPeriodEnd) > new Date()
+            sub.endsAt &&
+            new Date(sub.endsAt) > new Date() &&
+            (sub.unlimited || sub.balance > 0)
         );
-        const isUnlimited = hasActivePlan && sub.planType === 'UNLIMITED_1M';
-        const credits = hasActivePlan ? sub.creditsRemaining : 0;
+        const isUnlimited = hasActivePlan && sub.unlimited;
+        const credits = hasActivePlan ? sub.balance : 0;
 
         if (!jobResult || jobResult.length === 0) {
             return Response.json({
                 status: 'idle',
                 credits,
-                isUnlimited,
-                planType: hasActivePlan ? sub.planType : null
+                isUnlimited
             }, { status: 200 });
         }
 
@@ -95,8 +93,7 @@ export async function GET(req) {
             errorMessage: job.errorMessage,
             audioUrl,
             credits,
-            isUnlimited,
-            planType: hasActivePlan ? sub.planType : null
+            isUnlimited
         }, { status: 200 });
 
     } catch (error) {

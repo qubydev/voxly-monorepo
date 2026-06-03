@@ -1,1 +1,0 @@
-ALTER TABLE "tts_jobs" ADD COLUMN "file_name" text;

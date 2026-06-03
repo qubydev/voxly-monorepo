@@ -1,8 +1,6 @@
 import { index, pgTable, text, timestamp, boolean, uuid, varchar, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
 
 export const jobStatus = pgEnum('job_status', ['pending', 'processing', 'completed', 'failed']);
-export const subscriptionPlan = pgEnum('subscription_plan', ['CREDITS_1M', 'UNLIMITED_1M']);
-export const subscriptionStatus = pgEnum('subscription_status', ['active', 'expired', 'cancelled']);
 
 export const user = pgTable("user", {
     id: text("id").primaryKey(),
@@ -65,23 +63,20 @@ export const ttsJobs = pgTable("tts_jobs", {
     totalChunks: integer("total_chunks").default(0),
     timeTaken: numeric("time_taken", { precision: 10, scale: 2 }),
     errorMessage: text("error_message"),
+    errorLog: text("error_log"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const subscription = pgTable("subscription", {
     userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-    planType: subscriptionPlan("plan_type").notNull(),
-    status: subscriptionStatus("status").notNull().default('active'),
-    creditsIncluded: integer("credits_included").notNull().default(0),
-    creditsRemaining: integer("credits_remaining").notNull().default(0),
-    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }).defaultNow().notNull(),
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
-    grantedBy: text("granted_by"),
-    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    unlimited: boolean("unlimited").notNull().default(false),
+    balance: integer("balance").notNull().default(0),
+    balanceCredited: integer("balance_credited").notNull().default(0),
+    startsAt: timestamp("starts_at", { withTimezone: true }).defaultNow().notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-    index("subscription_active_expiry_idx").on(table.status, table.currentPeriodEnd),
+    index("subscription_expiry_idx").on(table.endsAt),
 ]);
